@@ -148,7 +148,7 @@ $patch
 ----- Correct Patch End -----
 
 Provide a JSON response with the following field:
-- "potential_improvements": Identify potential improvements to the coding agent that could enhance its coding capabilities. Focus on the agent's general coding abilities (e.g., better or new tools usable across any repository) rather than issue-specific fixes (e.g., tools only usable in one framework). All necessary dependencies and environment setup have already been handled, so do not focus on these aspects.
+- "potential_improvements": Must be a python list. Identify potential improvements to the coding agent that could enhance its coding capabilities. Focus on the agent's general coding abilities (e.g., better or new tools usable across any repository) rather than issue-specific fixes (e.g., tools only usable in one framework). All necessary dependencies and environment setup have already been handled, so do not focus on these aspects.
 Your response will be automatically parsed, so ensure that the string response is precisely in the correct format. Do NOT include the `<JSON>` tag in your output."""
 
 META_IMPROMENT_GENERATOR = """# ADVANCED META_IMPROVEMENT_GENERATOR
@@ -193,9 +193,9 @@ Keep Output Format **exactly as written** with the delimited areas, and  keep No
 Using the above inputs and instructions, generate a **new improved agents specification**. Include the following sections in a **single valid JSON block**:
 
 Provide a JSON response with the following field:
-- "A": New agent code, with improvements.
-- "B": New agent code, different agent with improvements.
-- "C": Another agent code, with improvements.
+- "A": New agent code, with improvements. Directly obtained by "A" key.
+- "B": String, new agent code, different agent with improvements. Directly obtained by "B" key.
+- "C": String, another agent code, with improvements. DIrectly obtained by "C" key.
 
 Your response will be automatically parsed, so ensure that the string response is precisely in the correct format. Do NOT include the `<JSON>` tag in your output.
 """
@@ -268,5 +268,5 @@ def parse_meta_agent_generator(response):
 def create_generator_prompt(feedback,past_agents):
     prompt_template = Template(META_IMPROMENT_GENERATOR)
 
-    prompt = prompt_template.substitute(feedback,past_agents)
+    prompt = prompt_template.substitute(error_analyzer_analysis=feedback,subsequent_agent_codes=past_agents)
     return prompt

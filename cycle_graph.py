@@ -8,11 +8,17 @@ from tool import run_meta_evaluator
 from tool import run_prompt_optimizer
 from tool import select_problem
 import json
+from tool import pool_results
+import os 
+import shutil
+
 # ---------------------------------------------------------------------
 # NODOS DEL
 # ---------------------------------------------------------------------
 
 def get_prompts(state: SweBenchState):
+
+    print("Getting agents.")
     with open("agents.json","r") as f:
         prompts = json.load(f)
     
@@ -23,14 +29,18 @@ def get_prompts(state: SweBenchState):
 
 def node_select_problem(state: SweBenchState):
     """Selecciona un problema de SWE-bench."""
+    print("Selecting problems")
     problem = select_problem()
     state["problem"] = problem
+
+    print("Problems selected.")
+    [print(instance["instance_id"]) for instance in problem]
     return state
 
 
 def node_run_coders(state: SweBenchState):
     """Ejecuta los 3 codificadores con el mismo problema."""
-    print("Ejecutando agentes codificadores...")
+    print("Executing coding agents...")
     
     problem = state["problem"]
     prompts = state["prompts"]
@@ -45,7 +55,7 @@ def node_run_coders(state: SweBenchState):
 
 def node_swebench_eval(state: SweBenchState):
     """Evalúa los resultados de los coders con SWE-bench."""
-    print("🧪 Evaluando parches en SWE-bench...")
+    print("🧪 Evaluating patches on SWE-bench...")
     outputs = state["coder_outputs"]
 
     models = ["A","B","C"]
@@ -61,23 +71,24 @@ def node_swebench_eval(state: SweBenchState):
 
 def node_meta_evaluator(state: SweBenchState):
     """El agente grande evalúa los resultados de SWE-bench."""
-    print("🧠 MetaEvaluador analizando resultados...")
+    print("🧠 Evaluator analizing agents result..")
 
     feedback = {}
     for model in state["models"]:
         model_feedback = run_meta_evaluator(
             problem=state["problem"],
-            coder_outputs=state["coder_outputs"][model],
+            outputs=state["coder_outputs"][model],
             logs = state["logs_output"][model]
         )
         feedback[model] = model_feedback
     state["meta_feedback"] = feedback
+
     return state
 
 
 def node_prompt_optimizer(state: SweBenchState):
     """Genera nuevos prompts basados en el feedback del evaluador."""
-    print("🔧 Optimizando prompts...")
+    print("🔧 Optimizing prompts...")
     optimized = run_prompt_optimizer(state["meta_feedback"], state["prompts"])
     state["optimized_prompts"] = optimized
     return state
@@ -85,7 +96,7 @@ def node_prompt_optimizer(state: SweBenchState):
 
 def node_update_coders(state: SweBenchState):
     """Actualiza los coders con los nuevos prompts."""
-    print("🔄 Actualizando coders...")
+    print("🔄 Updating coding agents...")
     state["prompts"] = state["optimized_prompts"]
     with open("agents.json","w") as f:
        json.dump(state["prompts"],f)
@@ -98,13 +109,22 @@ def node_update_coders(state: SweBenchState):
 # ---------------------------------------------------------------------
 def should_continue(state: SweBenchState):
     """Decide si continuar el ciclo o finalizar."""
-    max_score = max(v["score"] for v in state["eval_results"].values())
-    if max_score >= 0.9 or state.get("iteration", 0) >= state.get("max_iterations", 5):
-        print(f"✅ Fin del ciclo: iteraciones={state.get('iteration', 0)}, mejor score={max_score}")
-        return END
-    else:
-        print(f"🔁 Continuando ciclo, iteración {state.get('iteration', 0) + 1}...")
-        return "select_problem"
+    pool_results()
+    print(f"🔁 Continuando ciclo, iteración {state.get('iteration', 0) + 1}...")
+
+    shutil.rmtree("logs/")
+
+    folder = "predictions/"
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.remove(file_path)  # elimina archivo o enlace simbólico
+            elif os.path.isdir(file_path):
+                os.rmdir(file_path)  # elimina carpeta vacía
+        except Exception as e:
+            print(f"Error eliminando {file_path}: {e}")
+    return "get_prompts"
 
 
 # ---------------------------------------------------------------------
