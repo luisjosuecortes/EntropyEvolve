@@ -1,4 +1,3 @@
-# graph/cycle_graph.py
 from langgraph.graph import StateGraph, END
 from state import SweBenchState
 
@@ -17,15 +16,15 @@ def get_prompts(state: SweBenchState):
     with open("agents.json","r") as f:
         prompts = json.load(f)
     
-    state.prompts = prompts
-    state.models = ["A","B","C"]
+    state["prompts"] = prompts
+    state["models"] = ["A","B","C"]
     return state
 
 
 def node_select_problem(state: SweBenchState):
     """Selecciona un problema de SWE-bench."""
     problem = select_problem()
-    state.problem = problem
+    state["problem"] = problem
     return state
 
 
@@ -33,13 +32,13 @@ def node_run_coders(state: SweBenchState):
     """Ejecuta los 3 codificadores con el mismo problema."""
     print("Ejecutando agentes codificadores...")
     
-    problem = state.problem
-    prompts = state.prompts
+    problem = state["problem"]
+    prompts = state["prompts"]
 
-    state.coder_outputs = {
-        "A": run_agent(problem, prompts[0],"A"),
-        "B": run_agent(problem, prompts[1],"B"),
-        "C": run_agent(problem,prompts[2],"C")
+    state["coder_outputs"] = {
+        "A": run_agent(problem, prompts["A"],"A"),
+        "B": run_agent(problem, prompts["B"],"B"),
+        "C": run_agent(problem, prompts["C"],"C")
     }
     return state
 
@@ -47,16 +46,16 @@ def node_run_coders(state: SweBenchState):
 def node_swebench_eval(state: SweBenchState):
     """Evalúa los resultados de los coders con SWE-bench."""
     print("🧪 Evaluando parches en SWE-bench...")
-    outputs = state.coder_outputs
+    outputs = state["coder_outputs"]
 
     models = ["A","B","C"]
 
     logs_output = {}
-    for model,result_path in outputs:
+    for model, result_path in outputs.items():
         run_swebench_eval(result_path)
         #logs/run_evaluation/'run_id'/'model_id'/
         logs_output[model] = "logs/run_evaluation/improve_process/"+model+"/"
-    state.logs_output = logs_output
+    state["logs_output"] = logs_output
     return state
 
 
@@ -65,32 +64,32 @@ def node_meta_evaluator(state: SweBenchState):
     print("🧠 MetaEvaluador analizando resultados...")
 
     feedback = {}
-    for model in state.models:
+    for model in state["models"]:
         model_feedback = run_meta_evaluator(
-            problem=state.problem,
-            coder_outputs=state.coder_outputs[model],
-            logs = state.logs_output[model]
+            problem=state["problem"],
+            coder_outputs=state["coder_outputs"][model],
+            logs = state["logs_output"][model]
         )
         feedback[model] = model_feedback
-    state.meta_feedback = feedback
+    state["meta_feedback"] = feedback
     return state
 
 
 def node_prompt_optimizer(state: SweBenchState):
     """Genera nuevos prompts basados en el feedback del evaluador."""
     print("🔧 Optimizando prompts...")
-    optimized = run_prompt_optimizer(state.meta_feedback,state.prompts)
-    state.optimized_prompts = optimized
+    optimized = run_prompt_optimizer(state["meta_feedback"], state["prompts"])
+    state["optimized_prompts"] = optimized
     return state
 
 
 def node_update_coders(state: SweBenchState):
     """Actualiza los coders con los nuevos prompts."""
     print("🔄 Actualizando coders...")
-    state.prompts = state.optimized_prompts
+    state["prompts"] = state["optimized_prompts"]
     with open("agents.json","w") as f:
-       json.dump(state.prompts,f)
-    state.iteration += 1
+       json.dump(state["prompts"],f)
+    state["iteration"] = state.get("iteration", 0) + 1
     return state
 
 
@@ -99,12 +98,12 @@ def node_update_coders(state: SweBenchState):
 # ---------------------------------------------------------------------
 def should_continue(state: SweBenchState):
     """Decide si continuar el ciclo o finalizar."""
-    max_score = max(v["score"] for v in state.eval_results.values())
-    if max_score >= 0.9 or state.iteration >= state.max_iterations:
-        print(f"✅ Fin del ciclo: iteraciones={state.iteration}, mejor score={max_score}")
+    max_score = max(v["score"] for v in state["eval_results"].values())
+    if max_score >= 0.9 or state.get("iteration", 0) >= state.get("max_iterations", 5):
+        print(f"✅ Fin del ciclo: iteraciones={state.get('iteration', 0)}, mejor score={max_score}")
         return END
     else:
-        print(f"🔁 Continuando ciclo, iteración {state.iteration + 1}...")
+        print(f"🔁 Continuando ciclo, iteración {state.get('iteration', 0) + 1}...")
         return "select_problem"
 
 
@@ -137,6 +136,7 @@ def build_cycle_graph():
 
     return workflow.compile()
 
-graph = build_cycle_graph()
-initial_state = SweBenchState()
-graph.invoke(initial_state)
+if __name__ == "__main__":
+    graph = build_cycle_graph()
+    initial_state = {}
+    graph.invoke(initial_state)
