@@ -24,7 +24,13 @@ pip install openai
 
 python cycle_graph.py
 
-## Self improvement explication.
+## Self improvement explication
+This project develops a self-improving agent system designed to optimize its performance in solving programming problems.  
+- The system consists of three coding agents, each assigned tasks from the SWE-Bench benchmark.
+- An evaluation node executes their solutions, collects the results, and generates logs detailing any detected errors.
+- These logs are analyzed by an evaluation agent, which extracts key insights about performance and mistakes.
+- Based on this analysis, an optimization agent adjusts the prompts of the coding agents, thereby restarting the continuous improvement cycle.
+- The entire system is implemented using a LangGraph graph structure, while the agents themselves are powered by OpenAI’s large language models (LLMs).
 
 ## Metric.
-We used SWE-bench for testing o
+We used SWE-bench for testing and having a quantitative evaluation.
