@@ -1,41 +1,45 @@
 # graph/cycle_graph.py
 from langgraph.graph import StateGraph, END
-from graph.state import SweBenchState
+from state import SweBenchState
 
 # Importamos los agentes (ya hechos con LangChain)
-from agents.coder_a import run_coder_a
-from agents.coder_b import run_coder_b
-from agents.coder_c import run_coder_c
-from agents.meta_evaluator import run_meta_evaluator
-from agents.prompt_optimizer import run_prompt_optimizer
-
-# Importamos las herramientas utilitarias
-from tools.swebench_eval import run_swebench_eval
-from tools.problem_selector import select_problem
-from tools.update_coders import update_coders_prompts
-
-
+from tool import run_agent
+from tool import run_swebench_eval
+from tool import run_meta_evaluator
+from tool import run_prompt_optimizer
+from tool import select_problem
+import json
 # ---------------------------------------------------------------------
 # NODOS DEL
 # ---------------------------------------------------------------------
+
+def get_prompts(state: SweBenchState):
+    with open("agents.json","r") as f:
+        prompts = json.load(f)
+    
+    state.prompts = prompts
+    state.models = ["A","B","C"]
+    return state
+
 
 def node_select_problem(state: SweBenchState):
     """Selecciona un problema de SWE-bench."""
     problem = select_problem()
     state.problem = problem
-    print(f"🧩 Problema seleccionado: {problem['id']}")
     return state
 
 
 def node_run_coders(state: SweBenchState):
     """Ejecuta los 3 codificadores con el mismo problema."""
     print("Ejecutando agentes codificadores...")
+    
     problem = state.problem
+    prompts = state.prompts
 
     state.coder_outputs = {
-        "coderA": run_coder_a(problem, prompt),
-        "coderB": run_coder_b(problem),
-        "coderC": run_coder_c(problem)
+        "A": run_agent(problem, prompts[0],"A"),
+        "B": run_agent(problem, prompts[1],"B"),
+        "C": run_agent(problem,prompts[2],"C")
     }
     return state
 
@@ -43,19 +47,31 @@ def node_run_coders(state: SweBenchState):
 def node_swebench_eval(state: SweBenchState):
     """Evalúa los resultados de los coders con SWE-bench."""
     print("🧪 Evaluando parches en SWE-bench...")
-    results = run_swebench_eval(state.coder_outputs)
-    state.eval_results = results
+    outputs = state.coder_outputs
+
+    models = ["A","B","C"]
+
+    logs_output = {}
+    for model,result_path in outputs:
+        run_swebench_eval(result_path)
+        #logs/run_evaluation/'run_id'/'model_id'/
+        logs_output[model] = "logs/run_evaluation/improve_process/"+model+"/"
+    state.logs_output = logs_output
     return state
 
 
 def node_meta_evaluator(state: SweBenchState):
     """El agente grande evalúa los resultados de SWE-bench."""
     print("🧠 MetaEvaluador analizando resultados...")
-    feedback = run_meta_evaluator(
-        problem=state.problem,
-        coder_outputs=state.coder_outputs,
-        eval_results=state.eval_results
-    )
+
+    feedback = {}
+    for model in state.models:
+        model_feedback = run_meta_evaluator(
+            problem=state.problem,
+            coder_outputs=state.coder_outputs[model],
+            logs = state.logs_output[model]
+        )
+        feedback[model] = model_feedback
     state.meta_feedback = feedback
     return state
 
@@ -63,7 +79,7 @@ def node_meta_evaluator(state: SweBenchState):
 def node_prompt_optimizer(state: SweBenchState):
     """Genera nuevos prompts basados en el feedback del evaluador."""
     print("🔧 Optimizando prompts...")
-    optimized = run_prompt_optimizer(state.meta_feedback)
+    optimized = run_prompt_optimizer(state.meta_feedback,state.prompts)
     state.optimized_prompts = optimized
     return state
 
@@ -71,7 +87,9 @@ def node_prompt_optimizer(state: SweBenchState):
 def node_update_coders(state: SweBenchState):
     """Actualiza los coders con los nuevos prompts."""
     print("🔄 Actualizando coders...")
-    update_coders_prompts(state.optimized_prompts)
+    state.prompts = state.optimized_prompts
+    with open("agents.json","w") as f:
+       json.dump(state.prompts,f)
     state.iteration += 1
     return state
 
@@ -95,8 +113,9 @@ def should_continue(state: SweBenchState):
 # ---------------------------------------------------------------------
 def build_cycle_graph():
     workflow = StateGraph(SweBenchState)
-
+    
     # Agregar nodos
+    workflow.add_node("get_prompts",get_prompts)
     workflow.add_node("select_problem", node_select_problem)
     workflow.add_node("run_coders", node_run_coders)
     workflow.add_node("swebench_eval", node_swebench_eval)
@@ -105,7 +124,8 @@ def build_cycle_graph():
     workflow.add_node("update_coders", node_update_coders)
 
     # Definir conexiones
-    workflow.set_entry_point("select_problem")
+    workflow.set_entry_point("get_prompts")
+    workflow.add_edge("get_prompts","select_problem")
     workflow.add_edge("select_problem", "run_coders")
     workflow.add_edge("run_coders", "swebench_eval")
     workflow.add_edge("swebench_eval", "meta_evaluator")
@@ -116,3 +136,7 @@ def build_cycle_graph():
     workflow.add_conditional_edges("update_coders", should_continue)
 
     return workflow.compile()
+
+graph = build_cycle_graph()
+initial_state = SweBenchState()
+graph.invoke(initial_state)

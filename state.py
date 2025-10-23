@@ -1,6 +1,6 @@
 # graph/state.py
 
-from langgraph.graph.state import MessagesState
+from langgraph.graph.message import MessagesState
 
 class SweBenchState(MessagesState):
     """
@@ -36,4 +36,6 @@ class SweBenchState(MessagesState):
         self.meta_feedback = None
         self.optimized_prompts = None
         self.iteration = 0
+        self.prompts = {}
+        self.models = {}
         # Podrías cargar max_iterations desde configuración externa
