@@ -1,7 +1,6 @@
 """
 Funciones encapsuladas para usar en LangGraph
 Este módulo expone funciones listas para usar que NO requieren implementación adicional.
-Tu compañero solo necesita conectarlas en el grafo de LangGraph.
 """
 
 from langchain_openai import ChatOpenAI
